@@ -1,0 +1,17 @@
+# Local Postgres for the demo. Start with: docker compose up -d
+# On first start it loads db/schema.sql and db/seed.sql automatically.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo_capital
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+volumes:
+  pgdata:
