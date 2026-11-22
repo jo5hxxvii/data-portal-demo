@@ -2,7 +2,7 @@ import streamlit as st
 
 from portal import config, db
 from portal.rules import flag_exceptions
-from portal.ui import compact, page_header, require_page
+from portal.ui import compact, download_csv, page_header, require_page
 
 require_page("exceptions")
 page_header("Exceptions", "Transactions flagged by rule. Review and filter below.")
@@ -52,4 +52,4 @@ with st.expander("How the rules work"):
 cols = ["txn_id", "created_at", "customer_id", "name", "segment", "type", "amount", "status", "channel", "rules"]
 st.dataframe(view[cols], width="stretch", hide_index=True, height=480,
              column_config={"amount": st.column_config.NumberColumn(format="$%.2f")})
-st.download_button("Download filtered exceptions (CSV)", view[cols].to_csv(index=False), "exceptions.csv", "text/csv")
+download_csv("Download filtered exceptions (CSV)", view[cols], "exceptions.csv")

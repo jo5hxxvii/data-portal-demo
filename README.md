@@ -1,6 +1,6 @@
 # Demo Capital Data Portal
 
-An internal data portal for a fictional investment company, built with Streamlit, PostgreSQL and Plotly. It shows a typical finance operations workflow: reporting, reconciliation, exception review and role-based access.
+An internal data portal for a fictional investment company, built with Streamlit, SQLite and Plotly. It shows a typical finance operations workflow: reporting, reconciliation, exception review and role-based access.
 
 Everything is synthetic. "Demo Capital" is not a real company. All customers, transactions and balances are generated with [Faker](https://faker.readthedocs.io/). There are no real names, logos or credentials anywhere in this repo.
 
@@ -33,7 +33,23 @@ Everything is synthetic. "Demo Capital" is not a real company. All customers, tr
 - Large amount: at or above a threshold
 - Failed then retried: a failed attempt followed by a successful one with the same details
 
-**Admin.** A role by page grid that controls who sees what. It is stored in the database and takes effect on the next click. The Admin role always keeps the Admin page so nobody gets locked out.
+**Data Lookup.** Pages for looking up records, all on synthetic data. Each lookup is logged and downloads as CSV.
+- Wallet Transactions: every transaction in a date range (up to 5 days)
+- Customer Transactions: paste one or many customer IDs to see wallets and transactions
+- Account Statement: one customer, a date range (up to 5 days), with opening, running and closing balance
+- Maturities: investments reaching maturity in a date range, by product, with the payout due
+- Savings Plans: plans that have not failed, with progress bars
+- Equity Portfolios: holdings on one snapshot date, with value by ticker (tickers and prices are made up)
+
+**Reports.** Embeds report links (like public Power BI links) that Admin adds. Each role only sees the reports ticked for it. The two reports that come with the demo are sample links to placeholder sites, so replace them in Admin.
+
+**Execute Query.** A SQL box for Admin. It allows one SELECT on the data tables, shows 20 rows, blocks restricted columns (`email`) and blocks `SELECT *` on customers. Everything run or blocked is logged. The check in `portal/query_guard.py` is a safety net, so with a real database also use a read only login. Run `PYTHONPATH=. pytest tests` after changing it.
+
+**Admin.** Four tabs. Users: add users, change roles, deactivate, reset passwords. Roles and pages: create roles, tick which pages and reports each role can open, delete empty roles. Reports: manage the report links. Data: row counts and a reset button. A Super role opens everything. You cannot change your own role, deactivate yourself, delete a role that has users, or delete the only Super role. Demo users are only created when missing, so your edits are kept.
+
+People are signed out after 60 idle minutes (`IDLE_TIMEOUT_MINUTES`).
+
+**Activity Log.** Records sign-ins (including failed ones), sign-outs, page views, CSV downloads, access changes and data resets, with the user, role, level, area and detail. Filter by date, user, level, area and text, and download the view. Times are UTC. The log is stored in the `audit_log` table and cannot be edited or cleared from the portal.
 
 Default access:
 
@@ -45,7 +61,7 @@ Default access:
 
 ## Setup
 
-You need Python 3.10 or newer and a PostgreSQL database. The quickest way to get one is Docker.
+You need Python 3.10 or newer. The database is a local SQLite file, so there is nothing else to install.
 
 ### 1. Install
 
@@ -63,27 +79,9 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-The defaults match the Docker setup below, so you can leave `.env` as it is.
+The defaults work as they are. The app creates `data/demo_capital.db` and generates the demo data on first start.
 
-### 3. Start Postgres
-
-With Docker:
-
-```bash
-docker compose up -d
-```
-
-On first start the container loads `db/schema.sql` and `db/seed.sql`, so the data is ready straight away.
-
-Without Docker, create a database and user yourself, then load the two files:
-
-```bash
-psql -h localhost -U demo -d demo_capital -f db/schema.sql -f db/seed.sql
-```
-
-If you skip seeding, the app creates the tables and generates the same data on first start.
-
-### 4. Run
+### 3. Run
 
 ```bash
 streamlit run app.py
@@ -96,16 +94,16 @@ Open http://localhost:8501 and sign in with a demo account from the login page.
 The app talks to the database through SQLAlchemy, so the engine is set by one variable:
 
 ```
-DATABASE_URL=postgresql+psycopg2://demo:demo@localhost:5432/demo_capital
-```
-
-This project is built for Postgres, but the engine can be swapped. The schema in `db/schema.sql` uses plain SQL types, and the app has no engine-specific code. To try another engine, install its driver and change the URL. For example, SQLite needs no extra driver:
-
-```
 DATABASE_URL=sqlite:///data/demo_capital.db
 ```
 
-MySQL or SQL Server would work the same way with their drivers. Only `db/seed.sql` is written for Postgres, because of the `BEGIN` and `COMMIT` wrapper. Other engines can skip it, since the app seeds itself.
+SQLite is the default and needs no server or extra driver. The schema in `db/schema.sql` uses plain SQL types and the app has no engine-specific code, so other engines work by installing their driver and changing the URL. For example, Postgres:
+
+```
+DATABASE_URL=postgresql+psycopg2://user:password@localhost:5432/demo_capital
+```
+
+`db/seed.sql` is an optional Postgres-only dump (it uses `BEGIN` and `COMMIT`). Load it with `psql -f db/schema.sql -f db/seed.sql` if you want it, otherwise the app seeds itself. To reset the SQLite data, delete `data/demo_capital.db`.
 
 | File | Purpose |
 |---|---|
@@ -129,10 +127,11 @@ All settings are environment variables. See `.env.example`.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DATABASE_URL` | local Postgres | Database connection |
+| `DATABASE_URL` | `sqlite:///data/demo_capital.db` | Database connection |
 | `FAKER_SEED` | `2026` | Makes the data repeatable |
 | `NUM_CUSTOMERS` | `300` | Customers to generate |
 | `NUM_TRANSACTIONS` | `6000` | Base transactions to generate |
+| `IDLE_TIMEOUT_MINUTES` | `60` | Sign out after this many idle minutes |
 | `DEMO_*_PASSWORD` | see file | Demo login passwords |
 | `LARGE_TXN_THRESHOLD` | `50000` | Large amount rule |
 | `DUPLICATE_WINDOW_MINUTES` | `10` | Duplicate rule window |
@@ -150,6 +149,8 @@ portal/
   datagen.py                Faker data generation
   rules.py                  Reconciliation and exception logic
   auth.py                   Password hashing
+  audit.py                  Writes and reads the activity log
+  query_guard.py            Checks the SQL on the Execute Query page
   pages_registry.py         Page list and default access
   ui.py                     Shared styling and chart helpers
 db/
@@ -157,7 +158,8 @@ db/
   seed.sql                  Synthetic seed data
 scripts/
   generate_seed_sql.py      Builds db/seed.sql
-docker-compose.yml          Local Postgres
+tests/
+  test_query_guard.py       Cases the query check must allow or block
 ```
 
 ## Notes

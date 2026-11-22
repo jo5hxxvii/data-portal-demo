@@ -56,11 +56,71 @@ CREATE INDEX IF NOT EXISTS ix_processor_reference ON processor_entries (referenc
 CREATE TABLE IF NOT EXISTS users (
     username       TEXT PRIMARY KEY,
     role           TEXT NOT NULL,
-    password_hash  TEXT NOT NULL
+    password_hash  TEXT NOT NULL,
+    active         INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS roles (
+    name         TEXT PRIMARY KEY,
+    description  TEXT NOT NULL,
+    is_super     INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS page_access (
     role      TEXT NOT NULL,
     page_key  TEXT NOT NULL,
     PRIMARY KEY (role, page_key)
+);
+
+-- Activity log: who did what, and when (times are UTC)
+CREATE TABLE IF NOT EXISTS audit_log (
+    ts         TIMESTAMP NOT NULL,
+    username   TEXT NOT NULL,
+    role       TEXT NOT NULL,
+    level      TEXT NOT NULL,
+    area       TEXT NOT NULL,
+    action     TEXT NOT NULL,
+    detail     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_audit_ts ON audit_log (ts);
+
+-- Power BI style report links shown on the Reports page
+CREATE TABLE IF NOT EXISTS reports (
+    slug    TEXT PRIMARY KEY,
+    title   TEXT NOT NULL,
+    url     TEXT NOT NULL,
+    active  INTEGER NOT NULL DEFAULT 1
+);
+
+-- Product data (synthetic)
+CREATE TABLE IF NOT EXISTS maturities (
+    maturity_id    TEXT PRIMARY KEY,
+    customer_id    TEXT NOT NULL,
+    product        TEXT NOT NULL,
+    principal      NUMERIC(16, 2) NOT NULL,
+    rate_pct       NUMERIC(5, 2) NOT NULL,
+    start_date     DATE NOT NULL,
+    maturity_date  DATE NOT NULL,
+    status         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_maturities_date ON maturities (maturity_date);
+
+CREATE TABLE IF NOT EXISTS savings_plans (
+    plan_id        TEXT PRIMARY KEY,
+    customer_id    TEXT NOT NULL,
+    plan_name      TEXT NOT NULL,
+    frequency      TEXT NOT NULL,
+    target_amount  NUMERIC(16, 2) NOT NULL,
+    saved_amount   NUMERIC(16, 2) NOT NULL,
+    start_date     DATE NOT NULL,
+    status         TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS equity_holdings (
+    snapshot_date  DATE NOT NULL,
+    customer_id    TEXT NOT NULL,
+    ticker         TEXT NOT NULL,
+    units          INTEGER NOT NULL,
+    price          NUMERIC(16, 2) NOT NULL,
+    PRIMARY KEY (snapshot_date, customer_id, ticker)
 );

@@ -9,6 +9,9 @@ from . import config
 
 SEGMENTS = ["Retail", "Premium", "Institutional"]
 CHANNELS = ["Bank transfer", "Card", "Wire", "Mobile app"]
+PRODUCTS = ["Fixed Deposit", "Treasury Bill", "Bond", "Commercial Paper"]
+PLAN_NAMES = ["Rainy Day", "School Fees", "Rent", "Holiday", "New Car", "Wedding"]
+TICKERS = {"NVLX": 42.0, "BRTN": 18.5, "KOLA": 96.2, "ZENT": 7.8, "PAXO": 55.4, "MIRA": 23.1}  # made up
 SEGMENT_SCALE = {"Retail": 2_000, "Premium": 9_000, "Institutional": 40_000}
 
 
@@ -126,10 +129,68 @@ def generate(seed: int | None = None) -> dict[str, pd.DataFrame]:
     proc = pd.concat([proc, pd.DataFrame(orphans)], ignore_index=True)
     proc.insert(0, "processor_id", [f"P{i + 1:07d}" for i in range(len(proc))])
 
+    # Product data. Own random generator, so the data above never changes.
+    prng = np.random.default_rng(seed + 100)
+    ids = customers["customer_id"].to_numpy()
+    seg_scale = dict(zip(customers.customer_id, scale))
+    today = end.date()
+
+    mats = []
+    for i in range(400):
+        cid = str(prng.choice(ids))
+        start_d = today - timedelta(days=int(prng.integers(0, 300)))
+        due = start_d + timedelta(days=int(prng.choice([90, 180, 270, 365])))
+        mats.append(
+            {
+                "maturity_id": f"M{i + 1:05d}",
+                "customer_id": cid,
+                "product": str(prng.choice(PRODUCTS)),
+                "principal": round(float(seg_scale[cid] * prng.uniform(0.5, 6)), 2),
+                "rate_pct": round(float(prng.uniform(8, 22)), 2),
+                "start_date": start_d.isoformat(),
+                "maturity_date": due.isoformat(),
+                "status": "Matured" if due <= today else "Active",
+            }
+        )
+
+    plans = []
+    for i in range(150):
+        cid = str(prng.choice(ids))
+        status = str(prng.choice(["Active", "Completed", "Failed"], p=[0.7, 0.2, 0.1]))
+        target = round(float(seg_scale[cid] * prng.uniform(0.5, 4)), 2)
+        share = {"Completed": 1.0, "Failed": prng.uniform(0, 0.3), "Active": prng.uniform(0.05, 0.95)}[status]
+        plans.append(
+            {
+                "plan_id": f"S{i + 1:05d}",
+                "customer_id": cid,
+                "plan_name": str(prng.choice(PLAN_NAMES)),
+                "frequency": str(prng.choice(["Daily", "Weekly", "Monthly"])),
+                "target_amount": target,
+                "saved_amount": round(float(target * share), 2),
+                "start_date": (today - timedelta(days=int(prng.integers(10, 400)))).isoformat(),
+                "status": status,
+            }
+        )
+
+    snaps = [today - timedelta(days=d) for d in range(1, 8)]  # the last 7 days up to yesterday
+    paths = {t: p * np.cumprod(1 + prng.normal(0, 0.015, len(snaps))) for t, p in TICKERS.items()}
+    holdings = []
+    for cid in prng.choice(ids, 80, replace=False):
+        for tk in prng.choice(list(TICKERS), int(prng.integers(2, 5)), replace=False):
+            units = int(prng.integers(10, 2000))
+            for k, d in enumerate(snaps):
+                holdings.append(
+                    {"snapshot_date": d.isoformat(), "customer_id": str(cid), "ticker": str(tk),
+                     "units": units, "price": round(float(paths[str(tk)][k]), 2)}
+                )
+
     return {
         "customers": customers,
         "wallets": wallets,
         "transactions": txns,
         "ledger_entries": ledger,
         "processor_entries": proc,
+        "maturities": pd.DataFrame(mats),
+        "savings_plans": pd.DataFrame(plans),
+        "equity_holdings": pd.DataFrame(holdings),
     }

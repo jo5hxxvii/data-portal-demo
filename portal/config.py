@@ -16,13 +16,17 @@ def _float(name: str, default: float) -> float:
     return float(os.getenv(name, default))
 
 
-# Any SQLAlchemy URL works. Postgres is the default; see README for swapping engines.
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://demo:demo@localhost:5432/demo_capital")
+# Any SQLAlchemy URL works. SQLite (a local file, no server) is the default; see README for other engines.
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///data/demo_capital.db")
 SCHEMA_FILE = ROOT / "db" / "schema.sql"
 
 FAKER_SEED = _int("FAKER_SEED", 2026)
 NUM_CUSTOMERS = _int("NUM_CUSTOMERS", 300)
 NUM_TRANSACTIONS = _int("NUM_TRANSACTIONS", 6000)
+
+MAX_RANGE_DAYS = 5  # longest date range allowed on lookup pages
+QUERY_MAX_ROWS = 20  # rows shown by the Execute Query page
+IDLE_TIMEOUT_MINUTES = _int("IDLE_TIMEOUT_MINUTES", 60)
 
 LARGE_TXN_THRESHOLD = _float("LARGE_TXN_THRESHOLD", 50000)
 DUPLICATE_WINDOW_MINUTES = _int("DUPLICATE_WINDOW_MINUTES", 10)

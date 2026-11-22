@@ -11,10 +11,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from portal.datagen import generate  # noqa: E402
-from portal.pages_registry import DEFAULT_ACCESS  # noqa: E402
+from portal.pages_registry import DEFAULT_ACCESS, DEFAULT_REPORTS, ROLES  # noqa: E402
 
 BATCH = 500
-ORDER = ["customers", "wallets", "transactions", "ledger_entries", "processor_entries"]
+ORDER = ["customers", "wallets", "transactions", "ledger_entries", "processor_entries",
+         "maturities", "savings_plans", "equity_holdings"]
 
 
 def lit(v) -> str:
@@ -47,13 +48,17 @@ def main() -> None:
         "BEGIN;",
         "",
     ]
-    lines += [f"DELETE FROM {t};" for t in reversed(ORDER)] + ["DELETE FROM page_access;", ""]
+    lines += [f"DELETE FROM {t};" for t in reversed(ORDER)] + ["DELETE FROM page_access;", "DELETE FROM roles;", "DELETE FROM reports;", ""]
     for t in ORDER:
         lines.append(f"-- {t} ({len(data[t])} rows)")
         lines += inserts(t, data[t])
-    lines.append("-- Default role access")
+    lines.append("-- Roles, default role access and sample reports")
+    roles = ",\n".join(f"  ('{n}', '{d}', {s})" for n, d, s in ROLES)
     vals = ",\n".join(f"  ('{r}', '{p}')" for r, pages in DEFAULT_ACCESS.items() for p in pages)
-    lines += [f"INSERT INTO page_access (role, page_key) VALUES\n{vals};", "", "COMMIT;", ""]
+    reps = ",\n".join(f"  ('{s}', '{t}', '{u}', {a})" for s, t, u, a in DEFAULT_REPORTS)
+    lines += [f"INSERT INTO roles (name, description, is_super) VALUES\n{roles};", "",
+              f"INSERT INTO page_access (role, page_key) VALUES\n{vals};", "",
+              f"INSERT INTO reports (slug, title, url, active) VALUES\n{reps};", "", "COMMIT;", ""]
     out = ROOT / "db" / "seed.sql"
     out.write_text("\n".join(lines))
     print(f"Wrote {out} ({out.stat().st_size / 1e6:.1f} MB)")

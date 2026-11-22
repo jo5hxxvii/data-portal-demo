@@ -2,7 +2,7 @@ import streamlit as st
 
 from portal import config, db
 from portal.rules import reconcile
-from portal.ui import compact, page_header, require_page
+from portal.ui import compact, download_csv, page_header, require_page
 
 require_page("reconciliation")
 page_header("Reconciliation", "Internal ledger compared with the payment processor, matched on reference.")
@@ -43,8 +43,7 @@ for tab, o in zip(tabs[:-1], options):
     with tab:
         sub = res[res.result == o]
         st.dataframe(sub, width="stretch", hide_index=True, height=360)
-        st.download_button(f"Download {o.lower()} (CSV)", sub.to_csv(index=False), f"recon_{o.lower().replace(' ', '_')}.csv",
-                           "text/csv", key=f"dl_{o}")
+        download_csv(f"Download {o.lower()} (CSV)", sub, f"recon_{o.lower().replace(' ', '_')}.csv", key=f"dl_{o}")
 with tabs[-1]:
     st.dataframe(view, width="stretch", hide_index=True, height=360)
-    st.download_button("Download selected view (CSV)", view.to_csv(index=False), "recon_selected.csv", "text/csv")
+    download_csv("Download selected view (CSV)", view, "recon_selected.csv")
